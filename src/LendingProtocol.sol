@@ -11,23 +11,29 @@ contract LendingProtocol{
     };
 
     struct Loan{
+        uint256 id
         address owner
+        LendingState status
         uint256 amount
         uint256 startDate
         uint256 dueDate
     }
 
     Loan[] private loansCollection;
+    uint256 loanCounter;
 
-    mapping(address=>Loan) userToLoan;
+    mapping(uint256=>Loan) idToLoan;
 
     function createLoan(uint256 amount){
         raffleCollection.push(
             Loan({
+                id: loanCounter
                 address: msg.sender,
                 amount,
-                startDate: block.timestamp
+                status: LendingState.REQUESTED
             })
         )
+        userToLoan[loanCounter] = loanCounter;
+        loanCounte++;
     }
 }
