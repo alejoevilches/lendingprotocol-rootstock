@@ -28,9 +28,12 @@ contract LendingProtocol{
         uint256 interest;
     }
 
-    error BidLoan_LoanNotInRequestedStatus();
-    error BidLoan_InvalidLoanId();
+    error BidLoan_LoanNotInBiddingStatus();
+    error StartBiddingProcess_InvalidStateOfLoan();
+    error InvalidLoanId();
     error BidLoan_InvalidInterestRate();
+    error CloseLoan_InvalidStateOfLoan();
+    error CloseLoan_LoanHasNoBids();
 
     uint256 private constant MAX_INTEREST_BASIS_POINT=10000;
 
@@ -42,6 +45,7 @@ contract LendingProtocol{
     mapping(uint256=>Loan) private idToLoan;
     mapping(uint256=>Bid) private idToBid;
     mapping(uint256=>uint256[]) private loanIdToBidId;
+    mapping(uint256=>uint256) private loanIdToWinningBidId;
 
     /// @notice Creates a new loan request
     /// @param amount The loan amount requested
@@ -58,12 +62,20 @@ contract LendingProtocol{
         ++loanCounter;
     }
 
+    /// @notice Starts the bidding process for a loan request
+    /// @param loanId The ID of the loan to start bidding on
+    function startBiddingProcess(uint256 loanId) external{
+        if(loanId == loanCounter + 1) revert InvalidLoanId();
+        if(idToLoan[loanId].status != LendingState.REQUESTED) revert StartBiddingProcess_InvalidStateOfLoan();
+        idToLoan[loanId].status = LendingState.BIDDING;
+    }
+
     /// @notice Places a bid on a loan request
     /// @param loanId The ID of the loan to bid on
     /// @param interest The interest rate for the bid in basis points
     function bidLoan(uint256 loanId, uint256 interest) external{
-        if(loanId > loanCounter - 1) revert BidLoan_InvalidLoanId();
-        if(idToLoan[loanId].status != LendingState.REQUESTED) revert BidLoan_LoanNotInRequestedStatus();
+        if(loanId == loanCounter + 1) revert InvalidLoanId();
+        if(idToLoan[loanId].status != LendingState.BIDDING) revert BidLoan_LoanNotInBiddingStatus();
         if(interest == 0 || interest > MAX_INTEREST_BASIS_POINT) revert BidLoan_InvalidInterestRate();
         Bid memory payload = Bid({
             id: bidCounter,
@@ -75,7 +87,23 @@ contract LendingProtocol{
         ++bidCounter;
     }
 
+    /// @notice Closes the bidding process for a loan and selects the best bid
+    /// @param loanId The ID of the loan to close
     function closeLoan(uint256 loanId) external{
+        if(loanId == loanCounter + 1) revert InvalidLoanId();
+        if(idToLoan[loanId].status != LendingState.BIDDING) revert CloseLoan_InvalidStateOfLoan();
 
+        uint256[] storage bidIds = loanIdToBidId[loanId];
+        if(bidIds.length == 0) revert CloseLoan_LoanHasNoBids();
+        uint256 bestBidId = bidIds[0];
+        for(uint256 i = 1; i < bidIds.length; ++i){
+            uint256 currentBidId = bidIds[i];
+
+            if(idToBid[currentBidId].interest < idToBid[bestBidId].interest){
+                bestBidId = currentBidId;
+            }
+        }
+        loanIdToWinningBidId[loanId] = bestBidId;
+        idToLoan[loanId].status = LendingState.CLOSED;
     }
 }
