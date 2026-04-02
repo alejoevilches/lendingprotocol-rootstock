@@ -35,6 +35,7 @@ contract LendingProtocol{
     error BidLoan_InvalidInterestRate();
     error CloseLoan_InvalidStateOfLoan();
     error CloseLoan_LoanHasNoBids();
+    error DefaultLoan_LoanNotInClosedStatus();
     error PayLoan_NotEnoughRBTC();
     error PayLoan_ErrorRefundingRBTC();
     error PayLoan_ErrorPayingLoan();
@@ -60,7 +61,8 @@ contract LendingProtocol{
             amount: amount,
             status: LendingState.REQUESTED,
             startDate: 0,
-            dueDate: 0
+            dueDate: 0,
+            lender:address(0)
         });
         idToLoan[loanCounter] = payload;
         ++loanCounter;
@@ -109,21 +111,34 @@ contract LendingProtocol{
         }
         loanIdToWinningBidId[loanId] = bestBidId;
         idToLoan[loanId].status = LendingState.CLOSED;
+        idToLoan[loanId].startDate = block.timestamp;
+        idToLoan[loanId].dueDate = block.timestamp + 30 days;
     }
-}
 
-function payLoan(uint256 loanId) external payable{
-    if(loanId >= loanCounter + 1) revert InvalidLoanId();
-    Loan memory selectedLoan = idToLoan[loanId];
-    Bid memory winnerBid = idToBid[loanIdToWinningBidId[loanId]];
-    uint256 totalAmount = selectedLoan.amount + (selectedLoan.amount * winnerBid.interest / MAX_INTEREST_BASIS_POINT);
-    if(msg.value < totalAmount) revert PayLoan_NotEnoughRBTC();
-    if(msg.value > totalAmount) {
-        uint256 difference = msg.value - totalAmount;
-        (bool success, ) = payable(msg.sender).call{value: difference};
-        if(!success) revert PayLoan_ErrorRefundingRBTC();
+    /// @notice Pays the loan amount with interest to the lender
+    /// @param loanId The ID of the loan to pay
+    function payLoan(uint256 loanId) payable external{
+        if(loanId >= loanCounter + 1) revert InvalidLoanId();
+        Loan memory selectedLoan = idToLoan[loanId];
+        Bid memory winnerBid = idToBid[loanIdToWinningBidId[loanId]];
+        uint256 totalAmount = selectedLoan.amount + (selectedLoan.amount * winnerBid.interest / MAX_INTEREST_BASIS_POINT);
+        if(msg.value < totalAmount) revert PayLoan_NotEnoughRBTC();
+       if(msg.value > totalAmount) {
+            uint256 difference = msg.value - totalAmount;
+            (bool refundSuccess, ) = payable(msg.sender).call{value: difference}("");
+            if(!refundSuccess) revert PayLoan_ErrorRefundingRBTC();
+        }
+        (bool paySuccess, ) = payable(selectedLoan.lender).call{value: totalAmount}("");
+        if(!paySuccess) revert PayLoan_ErrorPayingLoan();
+        idToLoan[loanId].status = LendingState.PAYED;
     }
-    (bool success, ) = payable(selectedLoan.lender).call{value: totalAmount};
-    idToLoan[loanId].status = LendingState.PAYED;
-    if(!success) revert PayLoan_ErrorPayingLoan();
+
+    /// @notice Marks a loan as defaulted if the due date has passed
+    /// @param loanId The ID of the loan to default
+    function defaultLoan(uint256 loanId) external{
+        if(loanId >= loanCounter + 1) revert InvalidLoanId();
+        if(idToLoan[loanId].status != LendingState.CLOSED) revert DefaultLoan_LoanNotInClosedStatus();
+        if(block.timestamp <= idToLoan[loanId].dueDate) revert DefaultLoan_LoanNotInClosedStatus();
+        idToLoan[loanId].status = LendingState.DEFAULTED;
+    }
 }
