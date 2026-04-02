@@ -20,6 +20,7 @@ contract LendingProtocol{
         uint256 amount;
         uint256 startDate;
         uint256 dueDate;
+        address lender;
     }
 
     struct Bid{
@@ -34,6 +35,9 @@ contract LendingProtocol{
     error BidLoan_InvalidInterestRate();
     error CloseLoan_InvalidStateOfLoan();
     error CloseLoan_LoanHasNoBids();
+    error PayLoan_NotEnoughRBTC();
+    error PayLoan_ErrorRefundingRBTC();
+    error PayLoan_ErrorPayingLoan();
 
     uint256 private constant MAX_INTEREST_BASIS_POINT=10000;
 
@@ -74,7 +78,7 @@ contract LendingProtocol{
     /// @param loanId The ID of the loan to bid on
     /// @param interest The interest rate for the bid in basis points
     function bidLoan(uint256 loanId, uint256 interest) external{
-        if(loanId == loanCounter + 1) revert InvalidLoanId();
+        if(loanId >= loanCounter + 1) revert InvalidLoanId();
         if(idToLoan[loanId].status != LendingState.BIDDING) revert BidLoan_LoanNotInBiddingStatus();
         if(interest == 0 || interest > MAX_INTEREST_BASIS_POINT) revert BidLoan_InvalidInterestRate();
         Bid memory payload = Bid({
@@ -90,7 +94,7 @@ contract LendingProtocol{
     /// @notice Closes the bidding process for a loan and selects the best bid
     /// @param loanId The ID of the loan to close
     function closeLoan(uint256 loanId) external{
-        if(loanId == loanCounter + 1) revert InvalidLoanId();
+        if(loanId >= loanCounter + 1) revert InvalidLoanId();
         if(idToLoan[loanId].status != LendingState.BIDDING) revert CloseLoan_InvalidStateOfLoan();
 
         uint256[] storage bidIds = loanIdToBidId[loanId];
@@ -106,4 +110,20 @@ contract LendingProtocol{
         loanIdToWinningBidId[loanId] = bestBidId;
         idToLoan[loanId].status = LendingState.CLOSED;
     }
+}
+
+function payLoan(uint256 loanId) external payable{
+    if(loanId >= loanCounter + 1) revert InvalidLoanId();
+    Loan memory selectedLoan = idToLoan[loanId];
+    Bid memory winnerBid = idToBid[loanIdToWinningBidId[loanId]];
+    uint256 totalAmount = selectedLoan.amount + (selectedLoan.amount * winnerBid.interest / MAX_INTEREST_BASIS_POINT);
+    if(msg.value < totalAmount) revert PayLoan_NotEnoughRBTC();
+    if(msg.value > totalAmount) {
+        uint256 difference = msg.value - totalAmount;
+        (bool success, ) = payable(msg.sender).call{value: difference};
+        if(!success) revert PayLoan_ErrorRefundingRBTC();
+    }
+    (bool success, ) = payable(selectedLoan.lender).call{value: totalAmount};
+    idToLoan[loanId].status = LendingState.PAYED;
+    if(!success) revert PayLoan_ErrorPayingLoan();
 }
