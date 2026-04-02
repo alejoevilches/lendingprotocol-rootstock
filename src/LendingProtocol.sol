@@ -1,60 +1,76 @@
 // SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.24;
+
+import "./interfaces/ILendingProtocol.sol";
 
 /// @title LendingProtocol
 /// @author Alejo Vilches
 /// @notice A lending protocol contract for managing loans and bids. Final project for the Rootstock Rootcamp.
-contract LendingProtocol{
-    enum LendingState{
-        REQUESTED,
-        BIDDING,
-        CLOSED,
-        PAYED,
-        DEFAULTED
-    }
+contract LendingProtocol is ILendingProtocol{
 
-    struct Loan{
-        uint256 id;
-        address owner;
-        LendingState status;
-        uint256 amount;
-        uint256 startDate;
-        uint256 dueDate;
-        address lender;
-    }
-
-    struct Bid{
-        uint256 id;
-        uint256 loanId;
-        uint256 interest;
-    }
-
+    error CreateLoan_ZeroAmount();
     error BidLoan_LoanNotInBiddingStatus();
+    error BidLoan_InvalidInterestRate();
+    error BidLoan_InvalidPrincipalAmount();
+    error BidLoan_OwnerCannotBid();
+    error BidLoan_DuplicateBidder();
     error StartBiddingProcess_InvalidStateOfLoan();
     error InvalidLoanId();
-    error BidLoan_InvalidInterestRate();
     error CloseLoan_InvalidStateOfLoan();
     error CloseLoan_LoanHasNoBids();
+    error CloseLoan_ErrorFundingBorrower();
     error DefaultLoan_LoanNotInClosedStatus();
     error PayLoan_NotEnoughRBTC();
     error PayLoan_ErrorRefundingRBTC();
     error PayLoan_ErrorPayingLoan();
+    error PayLoan_InvalidState();
+    error PayLoan_ZeroLender();
+    error PayLoan_PastDueDate();
+    error Withdraw_NoFunds();
+    error Withdraw_ErrorSendingRBTC();
+    error OnlyLoanOwner_NotOwner();
+    error InvalidBidId();
+    error WithdrawBid_AlreadyWithdrawn();
+    error WithdrawBid_NotYourBid();
+    error WithdrawBid_WinnerCannotWithdraw();
+    error WithdrawBid_LoanStillActive();
 
     uint256 private constant MAX_INTEREST_BASIS_POINT=10000;
 
-    /// @notice Counter for tracking the total number of loans created
     uint256 public loanCounter;
-    /// @notice Counter for tracking the total number of bids created
     uint256 public bidCounter;
 
     mapping(uint256=>Loan) private idToLoan;
     mapping(uint256=>Bid) private idToBid;
     mapping(uint256=>uint256[]) private loanIdToBidId;
     mapping(uint256=>uint256) private loanIdToWinningBidId;
+    mapping(address=>uint256) private pendingWithdrawals;
+    mapping(uint256=>mapping(address=>bool)) private hasBidForLoan;
 
-    /// @notice Creates a new loan request
-    /// @param amount The loan amount requested
+    address public immutable ADMIN;
+
+    constructor(){
+        ADMIN = msg.sender;
+    }
+
+    modifier validLoan(uint256 loanId){
+        if(loanId >= loanCounter) revert InvalidLoanId();
+        _;
+    }
+
+    modifier onlyLoanOwner(uint256 loanId){
+        if(idToLoan[loanId].owner != msg.sender) revert OnlyLoanOwner_NotOwner();
+        _;
+    }
+
+    modifier onlyLoanOwnerOrAdmin(uint256 loanId){
+        if(idToLoan[loanId].owner != msg.sender && msg.sender != ADMIN) revert OnlyLoanOwner_NotOwner();
+        _;
+    }
+
     function createLoan(uint256 amount) external{
+        if(amount == 0) revert CreateLoan_ZeroAmount();
         Loan memory payload = Loan({
             id: loanCounter,
             owner: msg.sender,
@@ -62,83 +78,144 @@ contract LendingProtocol{
             status: LendingState.REQUESTED,
             startDate: 0,
             dueDate: 0,
-            lender:address(0)
+            lender: address(0),
+            bestBidId: 0,
+            hasBestBid: false
         });
         idToLoan[loanCounter] = payload;
         ++loanCounter;
+        emit LoanCreated(loanCounter - 1, msg.sender, amount);
     }
 
-    /// @notice Starts the bidding process for a loan request
-    /// @param loanId The ID of the loan to start bidding on
-    function startBiddingProcess(uint256 loanId) external{
-        if(loanId == loanCounter + 1) revert InvalidLoanId();
+    function startBiddingProcess(uint256 loanId) external validLoan(loanId) onlyLoanOwnerOrAdmin(loanId){
         if(idToLoan[loanId].status != LendingState.REQUESTED) revert StartBiddingProcess_InvalidStateOfLoan();
         idToLoan[loanId].status = LendingState.BIDDING;
+        emit BiddingStarted(loanId);
     }
 
-    /// @notice Places a bid on a loan request
-    /// @param loanId The ID of the loan to bid on
-    /// @param interest The interest rate for the bid in basis points
-    function bidLoan(uint256 loanId, uint256 interest) external{
-        if(loanId >= loanCounter + 1) revert InvalidLoanId();
-        if(idToLoan[loanId].status != LendingState.BIDDING) revert BidLoan_LoanNotInBiddingStatus();
+    function bidLoan(uint256 loanId, uint256 interest) external payable validLoan(loanId){
+        Loan storage loan = idToLoan[loanId];
+        if(loan.status != LendingState.BIDDING) revert BidLoan_LoanNotInBiddingStatus();
         if(interest == 0 || interest > MAX_INTEREST_BASIS_POINT) revert BidLoan_InvalidInterestRate();
+        if(loan.owner == msg.sender) revert BidLoan_OwnerCannotBid();
+        if(hasBidForLoan[loanId][msg.sender]) revert BidLoan_DuplicateBidder();
+        if(msg.value != loan.amount) revert BidLoan_InvalidPrincipalAmount();
+
         Bid memory payload = Bid({
             id: bidCounter,
             loanId: loanId,
-            interest: interest
+            bidder: msg.sender,
+            interest: interest,
+            principal: msg.value,
+            withdrawn: false
         });
         idToBid[bidCounter] = payload;
         loanIdToBidId[loanId].push(bidCounter);
-        ++bidCounter;
-    }
+        hasBidForLoan[loanId][msg.sender] = true;
 
-    /// @notice Closes the bidding process for a loan and selects the best bid
-    /// @param loanId The ID of the loan to close
-    function closeLoan(uint256 loanId) external{
-        if(loanId >= loanCounter + 1) revert InvalidLoanId();
-        if(idToLoan[loanId].status != LendingState.BIDDING) revert CloseLoan_InvalidStateOfLoan();
-
-        uint256[] storage bidIds = loanIdToBidId[loanId];
-        if(bidIds.length == 0) revert CloseLoan_LoanHasNoBids();
-        uint256 bestBidId = bidIds[0];
-        for(uint256 i = 1; i < bidIds.length; ++i){
-            uint256 currentBidId = bidIds[i];
-
-            if(idToBid[currentBidId].interest < idToBid[bestBidId].interest){
-                bestBidId = currentBidId;
-            }
+        if(!loan.hasBestBid || interest < idToBid[loan.bestBidId].interest){
+            loan.bestBidId = bidCounter;
+            loan.hasBestBid = true;
         }
-        loanIdToWinningBidId[loanId] = bestBidId;
-        idToLoan[loanId].status = LendingState.CLOSED;
-        idToLoan[loanId].startDate = block.timestamp;
-        idToLoan[loanId].dueDate = block.timestamp + 30 days;
+
+        ++bidCounter;
+        emit BidPlaced(loanId, bidCounter - 1, msg.sender, interest);
     }
 
-    /// @notice Pays the loan amount with interest to the lender
-    /// @param loanId The ID of the loan to pay
-    function payLoan(uint256 loanId) payable external{
-        if(loanId >= loanCounter + 1) revert InvalidLoanId();
-        Loan memory selectedLoan = idToLoan[loanId];
-        Bid memory winnerBid = idToBid[loanIdToWinningBidId[loanId]];
+    function closeLoan(uint256 loanId) external validLoan(loanId) onlyLoanOwnerOrAdmin(loanId){
+        Loan storage loan = idToLoan[loanId];
+        if(loan.status != LendingState.BIDDING) revert CloseLoan_InvalidStateOfLoan();
+        if(!loan.hasBestBid) revert CloseLoan_LoanHasNoBids();
+
+        uint256 bestBidId = loan.bestBidId;
+        Bid storage winningBid = idToBid[bestBidId];
+
+        loanIdToWinningBidId[loanId] = bestBidId;
+        loan.lender = winningBid.bidder;
+        loan.status = LendingState.CLOSED;
+        loan.startDate = block.timestamp;
+        loan.dueDate = block.timestamp + 30 days;
+
+        (bool success, ) = payable(loan.owner).call{value: loan.amount}("");
+        if(!success) revert CloseLoan_ErrorFundingBorrower();
+
+        emit LoanClosed(loanId, bestBidId, winningBid.bidder);
+    }
+
+    function payLoan(uint256 loanId) payable external validLoan(loanId) onlyLoanOwner(loanId){
+        Loan storage selectedLoan = idToLoan[loanId];
+        if(selectedLoan.status != LendingState.CLOSED) revert PayLoan_InvalidState();
+        if(selectedLoan.lender == address(0)) revert PayLoan_ZeroLender();
+        if(block.timestamp > selectedLoan.dueDate) revert PayLoan_PastDueDate();
+
+        uint256 winningBidId = loanIdToWinningBidId[loanId];
+        Bid memory winnerBid = idToBid[winningBidId];
         uint256 totalAmount = selectedLoan.amount + (selectedLoan.amount * winnerBid.interest / MAX_INTEREST_BASIS_POINT);
+
         if(msg.value < totalAmount) revert PayLoan_NotEnoughRBTC();
-       if(msg.value > totalAmount) {
+
+        selectedLoan.status = LendingState.PAYED;
+
+        if(msg.value > totalAmount){
             uint256 difference = msg.value - totalAmount;
             (bool refundSuccess, ) = payable(msg.sender).call{value: difference}("");
             if(!refundSuccess) revert PayLoan_ErrorRefundingRBTC();
         }
+
         (bool paySuccess, ) = payable(selectedLoan.lender).call{value: totalAmount}("");
         if(!paySuccess) revert PayLoan_ErrorPayingLoan();
-        idToLoan[loanId].status = LendingState.PAYED;
+
+        emit LoanPayed(loanId, totalAmount);
     }
 
-    /// @notice Marks a loan as defaulted if the due date has passed
-    /// @param loanId The ID of the loan to default
-    function defaultLoan(uint256 loanId) external{
-        if(loanId >= loanCounter + 1) revert InvalidLoanId();
-        if(idToLoan[loanId].status != LendingState.CLOSED) revert DefaultLoan_LoanNotInClosedStatus();
-        if(block.timestamp <= idToLoan[loanId].dueDate) revert DefaultLoan_LoanNotInClosedStatus();
-        idToLoan[loanId].status = LendingState.DEFAULTED;
+    function defaultLoan(uint256 loanId) external validLoan(loanId){
+        Loan storage selectedLoan = idToLoan[loanId];
+        if(selectedLoan.status != LendingState.CLOSED) revert DefaultLoan_LoanNotInClosedStatus();
+        if(block.timestamp <= selectedLoan.dueDate) revert DefaultLoan_LoanNotInClosedStatus();
+        selectedLoan.status = LendingState.DEFAULTED;
+        emit LoanDefaulted(loanId);
+    }
+
+    function withdraw() external{
+        uint256 amount = pendingWithdrawals[msg.sender];
+        if(amount == 0) revert Withdraw_NoFunds();
+        pendingWithdrawals[msg.sender] = 0;
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        if(!success) revert Withdraw_ErrorSendingRBTC();
+    }
+
+    function withdrawBid(uint256 bidId) external{
+        if(bidId >= bidCounter) revert InvalidBidId();
+        Bid storage bid = idToBid[bidId];
+        if(bid.bidder != msg.sender) revert WithdrawBid_NotYourBid();
+        if(bid.withdrawn) revert WithdrawBid_AlreadyWithdrawn();
+
+        uint256 winningBidId = loanIdToWinningBidId[bid.loanId];
+        if(winningBidId != 0 && winningBidId == bidId) revert WithdrawBid_WinnerCannotWithdraw();
+
+        bid.withdrawn = true;
+        (bool success, ) = payable(msg.sender).call{value: bid.principal}("");
+        if(!success) revert Withdraw_ErrorSendingRBTC();
+    }
+
+    function getLoan(uint256 loanId) external view validLoan(loanId) returns (Loan memory){
+        return idToLoan[loanId];
+    }
+
+    function getBid(uint256 bidId) external view returns (Bid memory){
+        if(bidId >= bidCounter) revert InvalidBidId();
+        return idToBid[bidId];
+    }
+
+    function getLoanBidIds(uint256 loanId) external view validLoan(loanId) returns (uint256[] memory){
+        return loanIdToBidId[loanId];
+    }
+
+    function getWinningBidId(uint256 loanId) external view validLoan(loanId) returns (uint256){
+        return loanIdToWinningBidId[loanId];
+    }
+
+    function getPendingWithdrawal(address account) external view returns (uint256){
+        return pendingWithdrawals[account];
     }
 }
