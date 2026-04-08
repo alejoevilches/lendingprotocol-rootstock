@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.24;
 
-import "./interfaces/ILendingProtocol.sol";
+import "../interfaces/ILendingProtocol.sol";
 
 /// @title LendingProtocol
 /// @author Alejo Vilches
@@ -217,5 +217,57 @@ contract LendingProtocol is ILendingProtocol{
 
     function getPendingWithdrawal(address account) external view returns (uint256){
         return pendingWithdrawals[account];
+    }
+
+    function getLoanView(uint256 loanId) external view validLoan(loanId) returns (LoanView memory){
+        return _getLoanView(loanId);
+    }
+
+    function getLoanViews(uint256 offset, uint256 limit) external view returns (LoanView[] memory){
+        if(offset >= loanCounter){
+            return new LoanView[](0);
+        }
+
+        uint256 maxLen = limit;
+        if(offset + limit > loanCounter){
+            maxLen = loanCounter - offset;
+        }
+
+        LoanView[] memory views = new LoanView[](maxLen);
+        for(uint256 i = 0; i < maxLen; i++){
+            views[i] = _getLoanView(offset + i);
+        }
+        return views;
+    }
+
+    function _getLoanView(uint256 loanId) internal view returns (LoanView memory){
+        Loan memory loan = idToLoan[loanId];
+        uint256 winningBidId = loanIdToWinningBidId[loanId];
+        uint256 repaymentAmount = 0;
+        bool canRepay = false;
+        bool canDefault = false;
+
+        if(loan.lender != address(0)){
+            if(loan.hasBestBid){
+                Bid memory winningBid = idToBid[loan.bestBidId];
+                repaymentAmount = loan.amount + (loan.amount * winningBid.interest / MAX_INTEREST_BASIS_POINT);
+            }
+        }
+
+        if(loan.status == LendingState.CLOSED && loan.lender != address(0)){
+            if(block.timestamp <= loan.dueDate){
+                canRepay = true;
+            }else{
+                canDefault = true;
+            }
+        }
+
+        return LoanView({
+            loan: loan,
+            winningBidId: winningBidId,
+            repaymentAmount: repaymentAmount,
+            canRepay: canRepay,
+            canDefault: canDefault
+        });
     }
 }

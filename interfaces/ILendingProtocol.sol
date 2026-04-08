@@ -31,6 +31,14 @@ interface ILendingProtocol {
         bool withdrawn;
     }
 
+    struct LoanView {
+        Loan loan;
+        uint256 winningBidId;
+        uint256 repaymentAmount;
+        bool canRepay;
+        bool canDefault;
+    }
+
     event LoanCreated(uint256 indexed loanId, address indexed owner, uint256 amount);
     event BiddingStarted(uint256 indexed loanId);
     event BidPlaced(uint256 indexed loanId, uint256 indexed bidId, address indexed bidder, uint256 interest);
@@ -52,6 +60,9 @@ interface ILendingProtocol {
     function getLoanBidIds(uint256 loanId) external view returns (uint256[] memory);
     function getWinningBidId(uint256 loanId) external view returns (uint256);
     function getPendingWithdrawal(address account) external view returns (uint256);
+
+    function getLoanView(uint256 loanId) external view returns (LoanView memory);
+    function getLoanViews(uint256 offset, uint256 limit) external view returns (LoanView[] memory);
 
     function loanCounter() external view returns (uint256);
     function bidCounter() external view returns (uint256);

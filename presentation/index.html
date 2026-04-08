@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LendingProtocol Presentation</title>
+  <style>
+    :root {
+      --bg: #07111f;
+      --panel: #0d1b2a;
+      --panel-2: #10253b;
+      --text: #eef4ff;
+      --muted: #9fb2ca;
+      --accent: #5cc8ff;
+      --accent-2: #8cffc1;
+      --accent-3: #ffd166;
+      --danger: #ff7b7b;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: radial-gradient(circle at top, #112641 0%, var(--bg) 55%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .brand {
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .deck {
+      flex: 1;
+      display: grid;
+      place-items: center;
+      padding: 16px 24px 32px;
+    }
+
+    .slide {
+      display: none;
+      width: min(1120px, 100%);
+      min-height: min(680px, calc(100vh - 120px));
+      background: linear-gradient(180deg, rgba(16,37,59,0.92), rgba(8,18,31,0.96));
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .slide.active { display: grid; }
+
+    .slide-grid {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 28px;
+      padding: 56px;
+      height: 100%;
+    }
+
+    .hero {
+      grid-template-columns: 1fr;
+      align-content: center;
+      text-align: left;
+    }
+
+    .kicker {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    h1, h2 {
+      margin: 0 0 18px;
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+    }
+
+    h1 { font-size: clamp(44px, 8vw, 76px); }
+    h2 { font-size: clamp(34px, 5vw, 54px); }
+
+    .subtitle {
+      max-width: 760px;
+      color: var(--muted);
+      font-size: clamp(18px, 2.5vw, 28px);
+      line-height: 1.35;
+    }
+
+    .left p {
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1.45;
+      margin: 0 0 20px;
+    }
+
+    ul.points {
+      margin: 20px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 14px;
+    }
+
+    ul.points li {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 16px 18px;
+      font-size: 22px;
+      line-height: 1.25;
+    }
+
+    .visual {
+      display: grid;
+      place-items: center;
+    }
+
+    .panel {
+      width: 100%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      padding: 24px;
+    }
+
+    .flow, .stack, .status-list {
+      display: grid;
+      gap: 16px;
+    }
+
+    .flow-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      align-items: center;
+    }
+
+    .box {
+      background: var(--panel-2);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      padding: 18px 14px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      min-height: 86px;
+      display: grid;
+      place-items: center;
+    }
+
+    .arrow {
+      text-align: center;
+      color: var(--accent);
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .mini {
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .bids {
+      display: grid;
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .bid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      background: rgba(255,255,255,0.04);
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 18px;
+    }
+
+    .rate {
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-weight: 800;
+      background: rgba(92, 200, 255, 0.16);
+      color: var(--accent);
+    }
+
+    .winner .rate {
+      background: rgba(140, 255, 193, 0.18);
+      color: var(--accent-2);
+    }
+
+    .winner {
+      border: 1px solid rgba(140, 255, 193, 0.28);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .stat {
+      background: rgba(255,255,255,0.04);
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 28px;
+      margin-bottom: 6px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 800;
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+    }
+
+    .argentina-card {
+      display: grid;
+      gap: 16px;
+    }
+
+    .arg-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .arg-box {
+      background: rgba(255,255,255,0.04);
+      border-radius: 18px;
+      padding: 18px 14px;
+      text-align: center;
+      min-height: 100px;
+    }
+
+    .arg-box strong {
+      display: block;
+      font-size: 16px;
+      color: var(--accent-3);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .bridge {
+      text-align: center;
+      font-size: 24px;
+      color: var(--accent);
+      font-weight: 800;
+      margin: 6px 0;
+    }
+
+    .rootstock-diagram {
+      display: grid;
+      gap: 14px;
+    }
+
+    .rootstock-top {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .rootstock-center {
+      display: grid;
+      place-items: center;
+      min-height: 120px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, rgba(92, 200, 255, 0.18), rgba(140, 255, 193, 0.12));
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 34px;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+    }
+
+    .status-list {
+      margin-top: 12px;
+    }
+
+    .status-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      background: rgba(255,255,255,0.04);
+      border-radius: 16px;
+      padding: 16px 18px;
+      font-size: 20px;
+    }
+
+    .ok, .next {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 8px 10px;
+      border-radius: 999px;
+    }
+
+    .ok {
+      background: rgba(140, 255, 193, 0.16);
+      color: var(--accent-2);
+    }
+
+    .next {
+      background: rgba(255, 209, 102, 0.16);
+      color: var(--accent-3);
+    }
+
+    .footer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 24px;
+      font-size: 14px;
+      color: var(--muted);
+      background: linear-gradient(180deg, transparent, rgba(0,0,0,0.12));
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+    }
+
+    button:hover { background: rgba(255,255,255,0.14); }
+
+    .closing {
+      max-width: 820px;
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.3;
+      color: var(--text);
+    }
+
+    .highlight { color: var(--accent-2); }
+
+    @media (max-width: 900px) {
+      .slide-grid,
+      .hero {
+        grid-template-columns: 1fr;
+        padding: 32px;
+      }
+
+      .flow-row,
+      .arg-row,
+      .rootstock-top,
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      ul.points li,
+      .status-item,
+      .left p {
+        font-size: 18px;
+      }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .topbar, .footer .controls { display: none; }
+      .deck { padding: 0; }
+      .slide {
+        display: grid !important;
+        page-break-after: always;
+        width: 100%;
+        min-height: 100vh;
+        border-radius: 0;
+        box-shadow: none;
+        border: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">LendingProtocol</div>
+      <div>Use arrows or buttons to navigate</div>
+    </div>
+
+    <main class="deck">
+      <section class="slide active">
+        <div class="slide-grid hero">
+          <div>
+            <div class="kicker">Rootstock Lending MVP</div>
+            <h1>Transparent lending for real-world credit problems.</h1>
+            <p class="subtitle">A peer-to-peer loan marketplace where borrowers request capital and lenders compete on interest rate.</p>
+            <div class="stats">
+              <div class="stat">
+                <span class="tag">Built With</span>
+                <strong>Solidity + Foundry</strong>
+                <span>Smart contract MVP</span>
+              </div>
+              <div class="stat">
+                <span class="tag">Network</span>
+                <strong>Rootstock</strong>
+                <span>Bitcoin-aligned infrastructure</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>1 / 6</span>
+          <div class="controls">
+            <button type="button" data-action="prev">Prev</button>
+            <button type="button" data-action="next">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide">
+        <div class="slide-grid">
+          <div class="left">
+            <div class="kicker">Slide 1</div>
+            <h2>The Problem</h2>
+            <p>Traditional lending is often slow, opaque, and hard to access for smaller borrowers.</p>
+            <ul class="points">
+              <li>Slow credit access</li>
+              <li>Opaque loan conditions</li>
+              <li>Limited options for small borrowers</li>
+            </ul>
+          </div>
+          <div class="visual">
+            <div class="panel flow">
+              <div class="flow-row">
+                <div class="box">Borrower</div>
+                <div class="arrow">→</div>
+                <div class="box">Bank / Intermediary</div>
+                <div class="arrow">→</div>
+              </div>
+              <div class="flow-row">
+                <div class="box">Approval</div>
+                <div class="arrow">→</div>
+                <div class="box">Credit</div>
+                <div class="box mini">slow + unclear + costly</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>2 / 6</span>
+          <div class="controls">
+            <button type="button" data-action="prev">Prev</button>
+            <button type="button" data-action="next">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide">
+        <div class="slide-grid">
+          <div class="left">
+            <div class="kicker">Slide 2</div>
+            <h2>Our Solution</h2>
+            <p>`LendingProtocol` creates a simple on-chain marketplace where lenders compete to fund a borrower.</p>
+            <ul class="points">
+              <li>P2P lending on Rootstock</li>
+              <li>Borrowers request loans on-chain</li>
+              <li>Lenders compete on interest rate</li>
+            </ul>
+          </div>
+          <div class="visual">
+            <div class="panel">
+              <div class="box" style="margin-bottom: 16px;">Borrower posts loan request</div>
+              <div class="bids">
+                <div class="bid"><span>Lender A</span><span class="rate">8%</span></div>
+                <div class="bid winner"><span>Lender B</span><span class="rate">6% Winner</span></div>
+                <div class="bid"><span>Lender C</span><span class="rate">7%</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>3 / 6</span>
+          <div class="controls">
+            <button type="button" data-action="prev">Prev</button>
+            <button type="button" data-action="next">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide">
+        <div class="slide-grid">
+          <div class="left">
+            <div class="kicker">Slide 3</div>
+            <h2>How It Works</h2>
+            <p>The MVP covers the full loan lifecycle from request to repayment or default.</p>
+            <ul class="points">
+              <li>Create loan</li>
+              <li>Open bidding</li>
+              <li>Select best rate</li>
+              <li>Repay in 30 days or default</li>
+            </ul>
+          </div>
+          <div class="visual">
+            <div class="panel stack">
+              <div class="flow-row">
+                <div class="box">Request</div>
+                <div class="box">Bidding</div>
+                <div class="box">Funded</div>
+                <div class="box">Repayment</div>
+              </div>
+              <div class="bridge">or</div>
+              <div class="box" style="max-width: 260px; margin: 0 auto; border-color: rgba(255,123,123,0.35);">Default</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>4 / 6</span>
+          <div class="controls">
+            <button type="button" data-action="prev">Prev</button>
+            <button type="button" data-action="next">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide">
+        <div class="slide-grid">
+          <div class="left">
+            <div class="kicker">Slide 4</div>
+            <h2>Why This Matters in Argentina</h2>
+            <p>In Argentina, the need for alternatives is not theoretical. It is a daily financial reality.</p>
+            <ul class="points">
+              <li>Affordable credit is hard to access</li>
+              <li>Inflation makes borrowing unpredictable</li>
+              <li>Transparency can improve trust</li>
+              <li>Bitcoin-linked infrastructure is relevant</li>
+            </ul>
+          </div>
+          <div class="visual">
+            <div class="panel argentina-card">
+              <div class="arg-row">
+                <div class="arg-box"><strong>High Inflation</strong><span>Borrowing conditions change fast</span></div>
+                <div class="arg-box"><strong>Limited Credit</strong><span>Small users face fewer options</span></div>
+                <div class="arg-box"><strong>Need for Alternatives</strong><span>People already seek new rails</span></div>
+              </div>
+              <div class="bridge">↓</div>
+              <div class="box">Transparent on-chain lending</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>5 / 6</span>
+          <div class="controls">
+            <button type="button" data-action="prev">Prev</button>
+            <button type="button" data-action="next">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide">
+        <div class="slide-grid">
+          <div class="left">
+            <div class="kicker">Slide 5</div>
+            <h2>Why Rootstock + Current Status</h2>
+            <p>Rootstock gives this project a Bitcoin-aligned home, and the MVP is already implemented and tested.</p>
+            <ul class="points">
+              <li>Bitcoin-aligned ecosystem</li>
+              <li>EVM-compatible smart contracts</li>
+              <li>Core lending flow already built</li>
+              <li>Next: frontend and security improvements</li>
+            </ul>
+          </div>
+          <div class="visual">
+            <div class="panel">
+              <div class="rootstock-diagram">
+                <div class="rootstock-top">
+                  <div class="box">Bitcoin ecosystem</div>
+                  <div class="box">Smart contracts</div>
+                  <div class="box">RBTC</div>
+                </div>
+                <div class="rootstock-center">Rootstock</div>
+              </div>
+              <div class="status-list">
+                <div class="status-item"><span>Solidity contract</span><span class="ok">done</span></div>
+                <div class="status-item"><span>Foundry tests + CI</span><span class="ok">done</span></div>
+                <div class="status-item"><span>Frontend UX</span><span class="next">next</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>6 / 6</span>
+          <div class="controls">
+            <button type="button" data-action="prev">Prev</button>
+            <button type="button" data-action="next">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide">
+        <div class="slide-grid hero">
+          <div>
+            <div class="kicker">Closing</div>
+            <h2>Transparent, competitive, and Bitcoin-connected lending can become a real alternative for markets like <span class="highlight">Argentina</span>.</h2>
+            <p class="closing">This MVP proves the loan lifecycle on-chain and opens the door to a more usable lending product on Rootstock.</p>
+          </div>
+        </div>
+        <div class="footer">
+          <span>End</span>
+          <div class="controls">
+            <button type="button" data-action="prev">Prev</button>
+            <button type="button" data-action="next">Start</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const slides = [...document.querySelectorAll('.slide')];
+    let index = 0;
+
+    function render() {
+      slides.forEach((slide, i) => slide.classList.toggle('active', i === index));
+    }
+
+    function move(step) {
+      index = (index + step + slides.length) % slides.length;
+      render();
+    }
+
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      const action = button.dataset.action;
+      if (action === 'next') move(1);
+      if (action === 'prev') move(-1);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') move(1);
+      if (event.key === 'ArrowLeft' || event.key === 'PageUp') move(-1);
+    });
+
+    render();
+  </script>
+</body>
+</html>
